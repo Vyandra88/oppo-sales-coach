@@ -12,18 +12,18 @@ ctx.verify_mode = ssl.CERT_NONE
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 
-def cari_spek_mandiri(nama_hp):
-    """Mencari spesifikasi spesifik per unit ke Tavily secara terpisah agar data tidak tercampur"""
+def cari_spek_tervalidasi(nama_hp):
+    """Mencari spesifikasi hanya dari domain database terpercaya"""
     if not TAVILY_API_KEY or not nama_hp:
         return ""
     try:
         url = "https://api.tavily.com/search"
         payload = json.dumps({
             "api_key": TAVILY_API_KEY,
-            "query": f"{nama_hp} spesifikasi gsmarena baterai mAh supervooc fast charging chipset layar",
+            "query": f"{nama_hp} spesifikasi lengkap gsmarena carisinyal baterai mAh fast charging chipset",
             "search_depth": "advanced",
-            "include_answer": True,
-            "max_results": 3
+            "include_domains": ["gsmarena.com", "carisinyal.com", "oppo.com", "samsung.com", "kimovil.com"],
+            "max_results": 4
         }).encode('utf-8')
 
         req = urllib.request.Request(
@@ -33,9 +33,12 @@ def cari_spek_mandiri(nama_hp):
         )
         with urllib.request.urlopen(req, context=ctx, timeout=12) as res:
             data = json.loads(res.read().decode('utf-8'))
-            ringkasan = data.get("answer", "")
-            snippets = " \n".join([r.get("content", "") for r in data.get("results", [])])
-            return f"{ringkasan}\n{snippets}"
+            snippets = []
+            for r in data.get("results", []):
+                content = r.get("content", "").strip()
+                if content:
+                    snippets.append(content)
+            return "\n---\n".join(snippets)
     except Exception as e:
         print(f"Error Tavily {nama_hp}: {e}")
         return ""
@@ -70,38 +73,36 @@ class handler(BaseHTTPRequestHandler):
             usia = (data.get("usia") or data.get("age") or "").strip()
             pekerjaan = (data.get("pekerjaan") or data.get("occupation") or "Umum").strip()
 
-            # Pencarian terpisah agar data tidak tertukar
-            data_oppo = cari_spek_mandiri(tipe_oppo)
-            data_kompetitor = cari_spek_mandiri(tipe_kompetitor)
+            data_oppo = cari_spek_tervalidasi(tipe_oppo)
+            data_kompetitor = cari_spek_tervalidasi(tipe_kompetitor)
 
             prompt = f"""
-Peran: Anda adalah Head Trainer & Master Sales Coach OPPO di Indonesia.
-Tugas: Buat komparasi HEAD-TO-HEAD MENDALAM, RIIL, dan AKURAT antara {tipe_oppo} melawan {tipe_kompetitor}.
+Anda adalah Head Trainer & Master Sales Coach OPPO di Indonesia.
+Tugas Anda: Menyusun komparasi spesifikasi riil dan skrip closing promotor antara {tipe_oppo} melawan {tipe_kompetitor}.
 
-DATA HASIL PENCARIAN WEB RESMI:
---- DATA SPESIFIKASI {tipe_oppo} ---
-{data_oppo if data_oppo else "Gunakan data spesifikasi resmi terkini dari unit " + tipe_oppo}
+DOKUMEN SPESIFIKASI DARI DATABASE TERVERIFIKASI:
+========================
+SPESIFIKASI UNIT OPPO ({tipe_oppo}):
+{data_oppo if data_oppo else "Data web tidak ditemukan. Gunakan data spesifikasi resmi terkini dari " + tipe_oppo}
+========================
+SPESIFIKASI UNIT PEMBANDING ({tipe_kompetitor}):
+{data_kompetitor if data_kompetitor else "Data web tidak ditemukan. Gunakan data spesifikasi resmi terkini dari " + tipe_kompetitor}
+========================
 
---- DATA SPESIFIKASI {tipe_kompetitor} ---
-{data_kompetitor if data_kompetitor else "Gunakan data spesifikasi resmi terkini dari unit " + tipe_kompetitor}
-
-PROFIL CALON PEMBELI:
-- Profil: {gender}, Usia: {usia}, Aktivitas/Pekerjaan: {pekerjaan}
+PROFIL KONSUMEN:
+- Gender: {gender}, Rentang Usia: {usia}, Pekerjaan/Aktivitas: {pekerjaan}
 - Harga: {tipe_oppo} ({harga_oppo}) vs {tipe_kompetitor} ({harga_kompetitor})
 
-ATURAN KETAT SPESIFIKASI:
-1. Ekstrak dan gunakan angka metrik riil dari data di atas:
-   - Kapasitas Baterai (misal: jika tertulis 8000 mAh atau 5000 mAh, wajib tulis angka aslinya, dilarang menebak angka lain!).
-   - Kecepatan Cas (SUPERVOOC Watt vs Fast Charging kompetitor).
-   - Layar (Panel, Refresh Rate Hz, Nits kecerahan).
-   - Chipset/Prosesor & Sertifikasi Fisik (IP rating / Shock resistance).
-2. DILARANG menukar spesifikasi antara OPPO dan Kompetitor.
-3. Sambungkan kelebihan {tipe_oppo} langsung ke keuntungan aktivitas calon pembeli ({pekerjaan}).
-4. DILARANG memunculkan kelemahan produk OPPO.
+ATURAN VALIDASI DATA:
+1. Baca teks spesifikasi di atas dengan sangat teliti. Ambil kapasitas baterai riil (misal 8000 mAh atau 7000 mAh jika tertera di dokumen, dilarang mengubah menjadi angka 5000/6000 mAh!).
+2. Sebutkan Watt fast charging riil, sertifikasi ketahanan bodi/air (IP rating), refresh rate & panel layar, serta prosesor yang akurat.
+3. DILARANG menukar spesifikasi antara OPPO dan kompetitor.
+4. Hubungkan keunggulan fitur utama {tipe_oppo} secara langsung dengan relevansi pekerjaan pembeli ({pekerjaan}).
+5. DILARANG menyebutkan kelemahan produk OPPO.
 
 FORMAT OUTPUT:
 ### 1. Komparasi Spek Nyata Head-to-Head
-(Bandingkan 4 sektor utama: Performa/Chipset, Layar & Bodi, Baterai & Fast Charging, serta Kamera dengan data metrik angka riil kedua HP.)
+(Bandingkan 4 sektor: Performa/Chipset, Layar & Bodi, Baterai & Fast Charging, serta Kamera dengan data metrik angka riil kedua HP.)
 
 ### 2. Strategi Nilai Harga (Price-to-Value)
 (Analisis keuntungan investasi harga terhadap fitur riil yang didapat konsumen.)

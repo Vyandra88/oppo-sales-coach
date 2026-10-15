@@ -2,7 +2,6 @@ import os
 import json
 from http.server import BaseHTTPRequestHandler
 import requests
-import google.generativeai as genai
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -26,7 +25,7 @@ class handler(BaseHTTPRequestHandler):
             age = data.get('age', '').strip()
             occupation = data.get('occupation', '').strip()
 
-            # 1. Tarik Data Web via REST API Tavily (Ringan & Aman di Serverless)
+            # 1. Tarik Data Web via REST API Tavily
             web_context = ""
             tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
             if tavily_key and oppo_model and comp_model:
@@ -43,13 +42,10 @@ class handler(BaseHTTPRequestHandler):
                 except Exception:
                     web_context = ""
 
-            # 2. Hubungkan ke Gemini
+            # 2. Panggil Gemini via Direct REST API (Anti-Error Model 404)
             gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
             if not gemini_key:
-                raise Exception("GEMINI_API_KEY belum terdaftar di Environment Variables Vercel")
-
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+                raise Exception("GEMINI_API_KEY belum terpasang di Environment Variables Vercel")
 
             prompt = f"""
 Anda adalah Sales Trainer dan Coach Retail OPPO Indonesia.
@@ -76,8 +72,30 @@ INSTRUKSI:
 Gunakan format teks Markdown yang rapi.
 """
 
-            response = model.generate_content(prompt)
-            output_text = response.text if response and response.text else "Tidak ada respon dari model."
+            # Fallback otomatis jika salah satu model endpoint belum tersedia
+            models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+            output_text = ""
+            last_err = ""
+
+            for m in models_to_try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={gemini_key}"
+                body = {
+                    "contents": [{"parts": [{"text": prompt}]}]
+                }
+                gemini_res = requests.post(url, json=body, timeout=25)
+                if gemini_res.status_code == 200:
+                    resp_json = gemini_res.json()
+                    candidates = resp_json.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            output_text = parts[0].get("text", "")
+                            break
+                else:
+                    last_err = gemini_res.text
+
+            if not output_text:
+                raise Exception(f"Gagal generate dari Gemini: {last_err}")
 
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')

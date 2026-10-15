@@ -1,7 +1,44 @@
 import os
+import ssl
 import json
+import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler
-import requests
+
+# Bypass kendala SSL
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+
+def cari_web_nyata(query):
+    if not TAVILY_API_KEY:
+        return ""
+    try:
+        url = "https://api.tavily.com/search"
+        payload = json.dumps({
+            "api_key": TAVILY_API_KEY,
+            "query": f"{query} spesifikasi teknis lengkap baterai charging layar chipset",
+            "search_depth": "advanced",
+            "include_answer": True,
+            "max_results": 3
+        }).encode('utf-8')
+        
+        req = urllib.request.Request(
+            url, 
+            data=payload, 
+            headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+        )
+        with urllib.request.urlopen(req, context=ctx, timeout=12) as res:
+            data = json.loads(res.read().decode('utf-8'))
+            ringkasan = data.get("answer", "")
+            snippets = " \n".join([r.get("content", "") for r in data.get("results", [])])
+            return f"{ringkasan}\n{snippets}"
+    except Exception as e:
+        print(f"Error Tavily: {e}")
+        return ""
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -14,103 +51,91 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             content_length = int(self.headers.get('Content-Length', 0))
-            post_body = self.rfile.read(content_length).decode('utf-8')
-            data = json.loads(post_body) if post_body else {}
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
 
-            oppo_model = data.get('oppoModel', '').strip()
-            oppo_price = data.get('oppoPrice', '').strip()
-            comp_model = data.get('competitorModel', '').strip()
-            comp_price = data.get('competitorPrice', '').strip()
-            gender = data.get('gender', '').strip()
-            age = data.get('age', '').strip()
-            occupation = data.get('occupation', '').strip()
+            if not GEMINI_API_KEY:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "GEMINI_API_KEY belum disetel di Vercel"}).encode('utf-8'))
+                return
 
-            # 1. Tarik Data Web via REST API Tavily
-            web_context = ""
-            tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
-            if tavily_key and oppo_model and comp_model:
-                try:
-                    payload = {
-                        "api_key": tavily_key,
-                        "query": f"spesifikasi resmi GSMarena {oppo_model} vs {comp_model} Indonesia processor kamera watt",
-                        "max_results": 3
-                    }
-                    res = requests.post("https://api.tavily.com/search", json=payload, timeout=6)
-                    if res.status_code == 200:
-                        results = res.json().get("results", [])
-                        web_context = "\n".join([r.get("content", "") for r in results if r.get("content")])
-                except Exception:
-                    web_context = ""
+            tipe_oppo = data.get("tipe_oppo", "").strip()
+            tipe_kompetitor = data.get("tipe_kompetitor", "").strip()
+            harga_oppo = data.get("harga_oppo", "Tidak disebutkan")
+            harga_kompetitor = data.get("harga_kompetitor", "Tidak disebutkan")
+            gender = data.get("gender", "")
+            usia = data.get("usia", "")
+            pekerjaan = data.get("pekerjaan", "Umum")
 
-            # 2. Cek API Key Gemini
-            gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
-            if not gemini_key:
-                raise Exception("GEMINI_API_KEY belum terpasang di Environment Variables Vercel")
+            data_oppo = cari_web_nyata(tipe_oppo)
+            data_kompetitor = cari_web_nyata(tipe_kompetitor)
 
             prompt = f"""
-Anda adalah Sales Trainer dan Coach Retail OPPO Indonesia.
-Bantu Promotor menyusun argumen penjualan dan tabel komparasi spesifikasi yang 100% AKURAT.
+Anda adalah Master Sales Coach & Product Trainer Smartphone OPPO di Indonesia.
+Tugas: Buat komparasi HEAD-TO-HEAD MENDALAM & RIIL berdasarkan data internet berikut.
 
-DATA PERANGKAT:
-- Unit OPPO: {oppo_model} (Harga: {oppo_price})
-- Unit Kompetitor: {comp_model} (Harga: {comp_price})
+DATA RIIL INTERNET:
+--- UNIT OPPO ({tipe_oppo}) ---
+{data_oppo if data_oppo else "Data web tidak ditemukan, gunakan data spesifikasi resmi terkini perangkat ini."}
 
-PROFIL KONSUMEN:
-- Gender: {gender}
-- Usia: {age}
-- Pekerjaan: {occupation}
+--- UNIT PEMBANDING ({tipe_kompetitor}) ---
+{data_kompetitor if data_kompetitor else "Data web tidak ditemukan, gunakan data spesifikasi resmi terkini perangkat ini."}
 
-REFERENSI SPESIFIKASI DARI INTERNET:
-{web_context if web_context else "Gunakan data spesifikasi resmi terkini."}
+PROFIL CALON PEMBELI:
+- Profil: {gender}, Rentang Usia {usia}, Aktivitas/Pekerjaan: {pekerjaan}
+- Harga Pasar: {tipe_oppo} ({harga_oppo}) vs {tipe_kompetitor} ({harga_kompetitor})
 
-INSTRUKSI:
-1. Pastikan spesifikasi kedua perangkat (Chipset, Baterai, Charging Watt, Kamera, dan Layar) benar-benar akurat sesuai fakta dan tidak tertukar.
-2. Sajikan Tabel Komparasi Spesifikasi Kunci.
-3. Jelaskan Keunggulan OPPO yang relevan bagi profil konsumen ini ({occupation}).
-4. Susun Skrip Handling Objection elegan untuk meyakinkan pembeli memilih {oppo_model}.
+ATURAN STRATEGI:
+1. KOMPARASI SEKTOR NYATA (WAJIB ANGKA METRIK):
+   - Ambil data pembeda riil dari data di atas: Chipset, Jenis & Kecerahan Layar, Kapasitas Baterai (mAh) & Kecepatan Cas (SUPERVOOC vs Charger Lawan), serta Durabilitas Fisik (IP Rating).
+   - Dilarang memakai template hafalan jika perangkat memiliki spek khusus (seperti baterai jumbo 8000mAh atau fast charging tinggi).
+2. RELEVANSI AKTIVITAS:
+   - Sambungkan fitur unggulan OPPO langsung ke keuntungan pekerjaan konsumen ({pekerjaan}).
+3. DILARANG memunculkan kelemahan produk OPPO.
 
-Gunakan format teks Markdown yang rapi.
+FORMAT JAWABAN:
+### 1. Komparasi Spek Nyata Head-to-Head
+(Bandingkan 4 sektor: Performa/Chipset, Layar & Bodi, Baterai & Charging, Kamera dengan angka metrik konkret kedua HP.)
+
+### 2. Strategi Nilai Harga (Price-to-Value)
+(Penjelasan logis perbandingan selisih harga dengan peningkatan spek riil yang didapat.)
+
+### 3. Skrip Closing Promotor
+(2-3 kalimat lisan santai, persuasif, dan percaya diri yang langsung siap diucapkan promotor di lantai toko.)
 """
 
-            # 3. Model Gemini Sesuai Rekomendasi Resmi Google
-            models_to_try = [
-                "gemini-3.8-flash",
-                "gemini-2.0-flash",
-                "gemini-2.0-flash-exp"
-            ]
-
-            headers = {"Content-Type": "application/json"}
-            body = {"contents": [{"parts": [{"text": prompt}]}]}
-
+            payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode('utf-8')
+            models = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
             output_text = ""
-            last_err = ""
+            last_error = ""
 
-            for m in models_to_try:
-                gen_url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={gemini_key}"
-                res = requests.post(gen_url, headers=headers, json=body, timeout=25)
-
-                if res.status_code == 200:
-                    candidates = res.json().get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            output_text = parts[0].get("text", "")
-                            break
-                else:
-                    last_err = res.text
+            for m in models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={GEMINI_API_KEY}"
+                req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'})
+                try:
+                    with urllib.request.urlopen(req, context=ctx, timeout=20) as res:
+                        res_json = json.loads(res.read().decode('utf-8'))
+                        output_text = res_json['candidates'][0]['content']['parts'][0]['text']
+                        break
+                except Exception as e:
+                    last_error = str(e)
+                    continue
 
             if not output_text:
-                raise Exception(f"Gagal generate dari Gemini: {last_err}")
+                raise Exception(f"Gagal generate dari Gemini: {last_error}")
 
             self.send_response(200)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({"result": output_text}).encode('utf-8'))
 
         except Exception as e:
             self.send_response(200)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({"error": f"Kendala teknis backend: {str(e)}"}).encode('utf-8'))

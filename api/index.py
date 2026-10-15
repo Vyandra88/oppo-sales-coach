@@ -8,7 +8,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-goog-api-key')
         self.end_headers()
 
     def do_POST(self):
@@ -72,28 +72,30 @@ INSTRUKSI:
 Gunakan format teks Markdown yang rapi.
 """
 
-            # 3. Panggil Gemini dengan Header Khusus (Mendukung Format AQ. dan AIza)
+            # 3. Model Gemini Resmi Terbaru (Mengatasi 404 pada model usang)
+            models_to_try = [
+                "gemini-2.5-flash",
+                "gemini-2.0-flash",
+                "gemini-2.0-flash-exp",
+                "gemini-1.5-flash-002",
+                "gemini-1.5-pro-002"
+            ]
+
             headers = {
                 "Content-Type": "application/json",
-                "x-goog-api-key": gemini_key,
-                "Authorization": f"Bearer {gemini_key}"
+                "x-goog-api-key": gemini_key
             }
             body = {
                 "contents": [{"parts": [{"text": prompt}]}]
             }
 
-            models = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
             output_text = ""
             last_err = ""
 
-            for m in models:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
+            for m in models_to_try:
+                # Coba dengan parameter query ?key=
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={gemini_key}"
                 res = requests.post(url, headers=headers, json=body, timeout=25)
-                
-                # Jika ditolak tanpa query param, coba sertakan ?key=
-                if res.status_code != 200:
-                    url_with_key = f"{url}?key={gemini_key}"
-                    res = requests.post(url_with_key, json=body, timeout=25)
 
                 if res.status_code == 200:
                     candidates = res.json().get("candidates", [])

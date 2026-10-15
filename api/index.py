@@ -5,7 +5,6 @@ import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler
 
-# Bypass kendala SSL
 ctx = ssl.create_default_context()
 ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
@@ -14,13 +13,13 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 
 def cari_web_nyata(query):
-    if not TAVILY_API_KEY:
+    if not TAVILY_API_KEY or not query:
         return ""
     try:
         url = "https://api.tavily.com/search"
         payload = json.dumps({
             "api_key": TAVILY_API_KEY,
-            "query": f"{query} spesifikasi teknis lengkap baterai charging layar chipset",
+            "query": f"{query} spesifikasi teknis lengkap gsmarena baterai charging layar chipset",
             "search_depth": "advanced",
             "include_answer": True,
             "max_results": 3
@@ -59,46 +58,48 @@ class handler(BaseHTTPRequestHandler):
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
-                self.wfile.write(json.dumps({"error": "GEMINI_API_KEY belum disetel di Vercel"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"error": "GEMINI_API_KEY belum terpasang di Vercel"}).encode('utf-8'))
                 return
 
-            tipe_oppo = data.get("tipe_oppo", "").strip()
-            tipe_kompetitor = data.get("tipe_kompetitor", "").strip()
-            harga_oppo = data.get("harga_oppo", "Tidak disebutkan")
-            harga_kompetitor = data.get("harga_kompetitor", "Tidak disebutkan")
-            gender = data.get("gender", "")
-            usia = data.get("usia", "")
-            pekerjaan = data.get("pekerjaan", "Umum")
+            # Menangani kedua variasi format penamaan input agar tidak kosong
+            tipe_oppo = (data.get("tipe_oppo") or data.get("oppoModel") or "").strip()
+            tipe_kompetitor = (data.get("tipe_kompetitor") or data.get("competitorModel") or "").strip()
+            harga_oppo = (data.get("harga_oppo") or data.get("oppoPrice") or "Tidak disebutkan").strip()
+            harga_kompetitor = (data.get("harga_kompetitor") or data.get("competitorPrice") or "Tidak disebutkan").strip()
+            gender = (data.get("gender") or "").strip()
+            usia = (data.get("usia") or data.get("age") or "").strip()
+            pekerjaan = (data.get("pekerjaan") or data.get("occupation") or "Umum").strip()
 
             data_oppo = cari_web_nyata(tipe_oppo)
             data_kompetitor = cari_web_nyata(tipe_kompetitor)
 
             prompt = f"""
 Anda adalah Master Sales Coach & Product Trainer Smartphone OPPO di Indonesia.
-Tugas: Buat komparasi HEAD-TO-HEAD MENDALAM & RIIL berdasarkan data internet berikut.
+Tugas Anda: Membuat komparasi HEAD-TO-HEAD MENDALAM & RIIL antara {tipe_oppo} melawan {tipe_kompetitor}.
 
-DATA RIIL INTERNET:
---- UNIT OPPO ({tipe_oppo}) ---
-{data_oppo if data_oppo else "Data web tidak ditemukan, gunakan data spesifikasi resmi terkini perangkat ini."}
+PERINGATAN KERAS:
+- DILARANG MENGGANTI perangkat ke model lain (misal Reno12 atau A55). Anda WAJIB membahas secara eksklusif {tipe_oppo} melawan {tipe_kompetitor}.
+- JANGAN menuliskan catatan bahwa unit tidak ditemukan atau menggunakan benchmark lain.
 
---- UNIT PEMBANDING ({tipe_kompetitor}) ---
-{data_kompetitor if data_kompetitor else "Data web tidak ditemukan, gunakan data spesifikasi resmi terkini perangkat ini."}
+DATA RIIL DARI HASIL PENCARIAN WEB:
+--- SPESIFIKASI {tipe_oppo} ---
+{data_oppo if data_oppo else "Gunakan data spesifikasi teknis resmi dari " + tipe_oppo}
+
+--- SPESIFIKASI {tipe_kompetitor} ---
+{data_kompetitor if data_kompetitor else "Gunakan data spesifikasi teknis resmi dari " + tipe_kompetitor}
 
 PROFIL CALON PEMBELI:
-- Profil: {gender}, Rentang Usia {usia}, Aktivitas/Pekerjaan: {pekerjaan}
+- Profil: {gender}, Rentang Usia: {usia}, Aktivitas/Pekerjaan: {pekerjaan}
 - Harga Pasar: {tipe_oppo} ({harga_oppo}) vs {tipe_kompetitor} ({harga_kompetitor})
 
-ATURAN STRATEGI:
-1. KOMPARASI SEKTOR NYATA (WAJIB ANGKA METRIK):
-   - Ambil data pembeda riil dari data di atas: Chipset, Jenis & Kecerahan Layar, Kapasitas Baterai (mAh) & Kecepatan Cas (SUPERVOOC vs Charger Lawan), serta Durabilitas Fisik (IP Rating).
-   - Dilarang memakai template hafalan jika perangkat memiliki spek khusus (seperti baterai jumbo 8000mAh atau fast charging tinggi).
-2. RELEVANSI AKTIVITAS:
-   - Sambungkan fitur unggulan OPPO langsung ke keuntungan pekerjaan konsumen ({pekerjaan}).
+PANDUAN STRATEGI:
+1. Cantumkan angka metrik riil spesifikasi (Chipset, nits kecerahan layar, kapasitas baterai mAh, dan Watt charging resmi).
+2. Hubungkan fitur unggulan {tipe_oppo} langsung dengan relevansi pekerjaan/kegiatan konsumen ({pekerjaan}).
 3. DILARANG memunculkan kelemahan produk OPPO.
 
 FORMAT JAWABAN:
 ### 1. Komparasi Spek Nyata Head-to-Head
-(Bandingkan 4 sektor: Performa/Chipset, Layar & Bodi, Baterai & Charging, Kamera dengan angka metrik konkret kedua HP.)
+(Tabel/Poin komparasi konkret: Performa/Chipset, Layar & Bodi, Baterai & Charging, Kamera dengan angka metrik konkret kedua HP.)
 
 ### 2. Strategi Nilai Harga (Price-to-Value)
 (Penjelasan logis perbandingan selisih harga dengan peningkatan spek riil yang didapat.)
@@ -116,7 +117,7 @@ FORMAT JAWABAN:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={GEMINI_API_KEY}"
                 req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'})
                 try:
-                    with urllib.request.urlopen(req, context=ctx, timeout=20) as res:
+                    with urllib.request.urlopen(req, context=ctx, timeout=25) as res:
                         res_json = json.loads(res.read().decode('utf-8'))
                         output_text = res_json['candidates'][0]['content']['parts'][0]['text']
                         break

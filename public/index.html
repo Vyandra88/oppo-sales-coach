@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strategi Komparasi OPPO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .oppo-gradient { background: linear-gradient(135deg, #059669 0%, #047857 100%); }
+    .prose h3 { font-size: 1.1rem; font-weight: 700; color: #047857; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+    .prose p { margin-bottom: 0.6rem; }
+    .prose ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.6rem; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen pb-12 antialiased">
+
+  <header class="oppo-gradient text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i data-lucide="shield-check" class="w-5 h-5 text-emerald-200"></i>
+        <div>
+          <h1 class="text-sm font-bold leading-tight">Strategi Komparasi OPPO</h1>
+          <p class="text-[10px] text-emerald-100 font-medium tracking-wide">Created by Vyandra Trainer</p>
+        </div>
+      </div>
+      <span class="text-[10px] bg-emerald-800/80 border border-emerald-400/30 px-2 py-0.5 rounded-full font-semibold">
+        AI Sales Coach
+      </span>
+    </div>
+  </header>
+
+  <main class="max-w-xl mx-auto px-4 py-4">
+    <div class="mb-4 px-1">
+      <h2 class="text-base font-bold text-slate-900 leading-snug">Berikan Solusi Terbaik Untuk User</h2>
+      <p class="text-xs text-slate-600 mt-0.5">Gali kebutuhan user. Sampaikan nilai jual produk OPPO yang menjawab kebutuhannya.</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-4">
+      <form id="coachForm" class="space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Tipe OPPO</label>
+            <input type="text" id="tipe_oppo" placeholder="Contoh: OPPO A7 Pro" required
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Harga OPPO (Rp)</label>
+            <input type="text" id="harga_oppo" placeholder="Misal: 3.999.000"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Brand & Tipe Kompetitor</label>
+            <input type="text" id="tipe_kompetitor" placeholder="Contoh: Brand X Tipe Y" required
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Harga Kompetitor (Rp)</label>
+            <input type="text" id="harga_kompetitor" placeholder="Misal: 4.299.000"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Gender User</label>
+            <select id="gender" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-sm">
+              <option value="Laki-laki">Laki-laki</option>
+              <option value="Perempuan">Perempuan</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Rentang Usia</label>
+            <select id="usia" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-sm">
+              <option value="18 - 24 tahun (Gen Z / Mahasiswa)">18 - 24 tahun</option>
+              <option value="25 - 34 tahun (Pekerja Muda)">25 - 34 tahun</option>
+              <option value="35 - 44 tahun (Dewasa)">35 - 44 tahun</option>
+              <option value="45+ tahun (Senior)">45+ tahun</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Pekerjaan / Aktivitas</label>
+          <input type="text" id="pekerjaan" placeholder="Contoh: Mahasiswi / Dosen / Driver Online"
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+
+        <button type="submit" id="btnSubmit" class="w-full oppo-gradient text-white font-semibold py-2.5 px-4 rounded-xl shadow-sm text-sm flex items-center justify-center space-x-1.5 active:scale-95 transition">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>Buat Skrip Closing AI</span>
+        </button>
+      </form>
+    </div>
+
+    <div id="loading" class="hidden py-8 text-center">
+      <div class="inline-block animate-spin rounded-full h-7 w-7 border-2 border-emerald-500 border-t-transparent"></div>
+      <p class="text-xs font-medium text-slate-500 mt-2">Menganalisis spek riil, kalkulasi harga, & menyusun skrip closing...</p>
+    </div>
+
+    <div id="resultBox" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 mb-3">
+        <h3 class="text-xs font-bold text-emerald-700 uppercase tracking-wide">Poin Penjualan & Skrip Promotor</h3>
+        <button id="copyBtn" class="text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg px-2 py-1 flex items-center space-x-1 hover:bg-slate-50">
+          <i data-lucide="copy" class="w-3 h-3"></i>
+          <span id="copyText">Salin</span>
+        </button>
+      </div>
+      <div id="contentTarget" class="prose max-w-none text-slate-700 text-xs sm:text-sm leading-relaxed"></div>
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+    const form = document.getElementById('coachForm');
+    const btn = document.getElementById('btnSubmit');
+    const loading = document.getElementById('loading');
+    const resultBox = document.getElementById('resultBox');
+    const contentTarget = document.getElementById('contentTarget');
+    const copyBtn = document.getElementById('copyBtn');
+    const copyText = document.getElementById('copyText');
+    let rawResult = '';
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      btn.classList.add('opacity-50');
+      loading.classList.remove('hidden');
+      resultBox.classList.add('hidden');
+
+      const payload = {
+        tipe_oppo: document.getElementById('tipe_oppo').value,
+        harga_oppo: document.getElementById('harga_oppo').value,
+        tipe_kompetitor: document.getElementById('tipe_kompetitor').value,
+        harga_kompetitor: document.getElementById('harga_kompetitor').value,
+        gender: document.getElementById('gender').value,
+        usia: document.getElementById('usia').value,
+        pekerjaan: document.getElementById('pekerjaan').value || 'Umum',
+      };
+
+      try {
+        const response = await fetch('/api/compare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (data.result) {
+          rawResult = data.result;
+          contentTarget.innerHTML = marked.parse(data.result);
+          resultBox.classList.remove('hidden');
+          resultBox.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          alert('Error: ' + (data.error || 'Gagal memproses data'));
+        }
+      } catch (err) {
+        alert('Koneksi server gagal: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+        loading.classList.add('hidden');
+      }
+    });
+
+    copyBtn.addEventListener('click', () => {
+      if (!rawResult) return;
+      navigator.clipboard.writeText(rawResult).then(() => {
+        copyText.textContent = 'Tersalin!';
+        setTimeout(() => { copyText.textContent = 'Salin'; }, 2000);
+      });
+    });
+  </script>
+</body>
+</html>

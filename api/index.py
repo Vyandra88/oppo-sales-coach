@@ -38,11 +38,11 @@ class handler(BaseHTTPRequestHandler):
                     res = requests.post("https://api.tavily.com/search", json=payload, timeout=6)
                     if res.status_code == 200:
                         results = res.json().get("results", [])
-                        web_context = "\n".join([r.get("content", "") for r in results])
+                        web_context = "\n".join([r.get("content", "") for r in results if r.get("content")])
                 except Exception:
                     web_context = ""
 
-            # 2. Panggil Gemini via Direct REST API (Anti-Error Model 404)
+            # 2. Cek API Key Gemini
             gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
             if not gemini_key:
                 raise Exception("GEMINI_API_KEY belum terpasang di Environment Variables Vercel")
@@ -72,27 +72,38 @@ INSTRUKSI:
 Gunakan format teks Markdown yang rapi.
 """
 
-            # Fallback otomatis jika salah satu model endpoint belum tersedia
-            models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+            # 3. Panggil Gemini dengan Header Khusus (Mendukung Format AQ. dan AIza)
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": gemini_key,
+                "Authorization": f"Bearer {gemini_key}"
+            }
+            body = {
+                "contents": [{"parts": [{"text": prompt}]}]
+            }
+
+            models = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
             output_text = ""
             last_err = ""
 
-            for m in models_to_try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={gemini_key}"
-                body = {
-                    "contents": [{"parts": [{"text": prompt}]}]
-                }
-                gemini_res = requests.post(url, json=body, timeout=25)
-                if gemini_res.status_code == 200:
-                    resp_json = gemini_res.json()
-                    candidates = resp_json.get("candidates", [])
+            for m in models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
+                res = requests.post(url, headers=headers, json=body, timeout=25)
+                
+                # Jika ditolak tanpa query param, coba sertakan ?key=
+                if res.status_code != 200:
+                    url_with_key = f"{url}?key={gemini_key}"
+                    res = requests.post(url_with_key, json=body, timeout=25)
+
+                if res.status_code == 200:
+                    candidates = res.json().get("candidates", [])
                     if candidates:
                         parts = candidates[0].get("content", {}).get("parts", [])
                         if parts:
                             output_text = parts[0].get("text", "")
                             break
                 else:
-                    last_err = gemini_res.text
+                    last_err = res.text
 
             if not output_text:
                 raise Exception(f"Gagal generate dari Gemini: {last_err}")

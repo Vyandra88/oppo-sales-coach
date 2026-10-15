@@ -1,120 +1,84 @@
 import os
-import ssl
 import json
-import urllib.request
-import urllib.error
 from http.server import BaseHTTPRequestHandler
-
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
-
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
-
-def cari_web_nyata(query):
-    if not TAVILY_API_KEY:
-        return ""
-    try:
-        url = "https://api.tavily.com/search"
-        payload = json.dumps({
-            "api_key": TAVILY_API_KEY,
-            "query": f"{query} spesifikasi teknis lengkap baterai charging layar chipset",
-            "search_depth": "advanced",
-            "include_answer": True,
-            "max_results": 3
-        }).encode('utf-8')
-        
-        req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as res:
-            data = json.loads(res.read().decode('utf-8'))
-            ringkasan = data.get("answer", "")
-            snippets = " \n".join([r.get("content", "") for r in data.get("results", [])])
-            return f"{ringkasan}\n{snippets}"
-    except Exception as e:
-        return ""
+import google.generativeai as genai
+from tavily import TavilyClient
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length)
-        data = json.loads(post_data.decode('utf-8'))
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            data = json.loads(post_data)
 
-        if not GEMINI_API_KEY:
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "GEMINI_API_KEY belum dikonfigurasi di Vercel"}).encode('utf-8'))
-            return
+            oppo_model = data.get('oppoModel', '').strip()
+            oppo_price = data.get('oppoPrice', '').strip()
+            comp_model = data.get('competitorModel', '').strip()
+            comp_price = data.get('competitorPrice', '').strip()
+            gender = data.get('gender', '').strip()
+            age = data.get('age', '').strip()
+            occupation = data.get('occupation', '').strip()
 
-        tipe_oppo = data.get("tipe_oppo", "").strip()
-        tipe_kompetitor = data.get("tipe_kompetitor", "").strip()
-        harga_oppo = data.get("harga_oppo", "Tidak disebutkan")
-        harga_kompetitor = data.get("harga_kompetitor", "Tidak disebutkan")
-        gender = data.get("gender", "")
-        usia = data.get("usia", "")
-        pekerjaan = data.get("pekerjaan", "Umum")
+            # 1. Tarik Data Spesifikasi Resmi Lewat Tavily
+            tavily_key = os.environ.get("TAVILY_API_KEY")
+            web_context = ""
+            if tavily_key:
+                try:
+                    tavily = TavilyClient(api_key=tavily_key)
+                    query = f"spesifikasi resmi GSMarena {oppo_model} vs {comp_model} Indonesia processor kamera fast charging"
+                    search_res = tavily.search(query=query, max_results=3)
+                    web_context = "\n".join([r.get("content", "") for r in search_res.get("results", [])])
+                except Exception:
+                    web_context = ""
 
-        data_oppo = cari_web_nyata(tipe_oppo)
-        data_kompetitor = cari_web_nyata(tipe_kompetitor)
+            # 2. Setup Gemini AI
+            gemini_key = os.environ.get("GEMINI_API_KEY")
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
 
-        prompt = f"""
-Anda adalah Master Sales Coach & Product Trainer Smartphone OPPO di Indonesia.
-Tugas: Buat komparasi HEAD-TO-HEAD MENDALAM & RIIL berdasarkan data internet berikut.
+            prompt = f"""
+Anda adalah Sales Trainer dan Coach Retail OPPO Indonesia.
+Gunakan data spesifikasi akurat berikut untuk membandingkan perangkat:
+--- DATA SPESIFIKASI DARI INTERNET ---
+{web_context}
+-------------------------------------
 
-DATA RIIL INTERNET:
---- UNIT OPPO ({tipe_oppo}) ---
-{data_oppo if data_oppo else "Gunakan data spesifikasi resmi terkini perangkat ini."}
+DATA PERANGKAT:
+- Unit OPPO: {oppo_model} (Harga: {oppo_price})
+- Unit Kompetitor: {comp_model} (Harga: {comp_price})
 
---- UNIT PEMBANDING ({tipe_kompetitor}) ---
-{data_kompetitor if data_kompetitor else "Gunakan data spesifikasi resmi terkini perangkat ini."}
+PROFIL KONSUMEN:
+- Gender: {gender}
+- Rentang Usia: {age}
+- Aktivitas/Pekerjaan: {occupation}
 
-PROFIL CALON PEMBELI:
-- Profil: {gender}, Usia {usia}, Profesi/Aktivitas: {pekerjaan}
-- Harga Pasar: {tipe_oppo} ({harga_oppo}) vs {tipe_kompetitor} ({harga_kompetitor})
+INSTRUKSI PENTING:
+1. Pastikan chipset, kapasitas baterai, kecepatan pengisian daya (Watt), sensor kamera, dan layar kedua HP BENAR-BENAR SESUAI FAKTA SPESIFIKASI. JANGAN MENEBAK ATAU MENUKAR SPESIFIKASI.
+2. Buat tabel perbandingan spesifikasi kunci.
+3. Buat skrip percakapan penanganan keberatan yang elegan, mengarahkan konsumen agar mantap memilih {oppo_model} sesuai kebutuhan aktivitasnya ({occupation}).
 
-ATURAN STRATEGI:
-1. KOMPARASI SEKTOR NYATA (WAJIB ANGKA METRIK):
-   - Ambil data pembeda riil: Chipset, Jenis/Kecerahan Layar, Kapasitas Baterai (mAh) & Kecepatan Cas (SUPERVOOC vs Charger Lawan), serta Durabilitas Fisik (IP Rating).
-2. RELEVANSI AKTIVITAS:
-   - Sambungkan fitur unggulan OPPO langsung ke keuntungan pekerjaan konsumen ({pekerjaan}).
-3. DILARANG memunculkan kelemahan produk OPPO.
-
-FORMAT JAWABAN:
-### 1. Komparasi Spek Nyata Head-to-Head
-(Bandingkan 4 sektor: Performa/Chipset, Layar & Bodi, Baterai & Charging, Kamera dengan angka metrik konkret kedua HP.)
-
-### 2. Strategi Nilai Harga (Price-to-Value)
-(Penjelasan logis perbandingan selisih harga dengan peningkatan spek riil yang didapat.)
-
-### 3. Skrip Closing Promotor
-(2-3 kalimat lisan santai, persuasif, dan percaya diri yang langsung siap diucapkan promotor di lapangan.)
+Berikan format output rapi menggunakan Markdown.
 """
 
-        payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode('utf-8')
-        models = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
-        success = False
-        last_error = ""
+            response = model.generate_content(prompt)
+            result_text = response.text
 
-        for m in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={GEMINI_API_KEY}"
-            req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'})
-            try:
-                with urllib.request.urlopen(req, context=ctx, timeout=20) as res:
-                    res_json = json.loads(res.read().decode('utf-8'))
-                    text = res_json['candidates'][0]['content']['parts'][0]['text']
-                    self.send_response(200)
-                    self.send_header('Content-type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"result": text}).encode('utf-8'))
-                    success = True
-                    break
-            except Exception as e:
-                last_error = str(e)
-                continue
-
-        if not success:
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps({"error": f"Layanan AI gagal: {last_error}"}).encode('utf-8'))
+            self.wfile.write(json.dumps({"result": result_text}).encode('utf-8'))
+
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()

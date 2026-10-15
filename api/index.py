@@ -8,7 +8,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-goog-api-key')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
     def do_POST(self):
@@ -25,7 +25,7 @@ class handler(BaseHTTPRequestHandler):
             age = data.get('age', '').strip()
             occupation = data.get('occupation', '').strip()
 
-            # 1. Tarik Data Web via REST API Tavily
+            # 1. Cari info spek via Tavily
             web_context = ""
             tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
             if tavily_key and oppo_model and comp_model:
@@ -42,10 +42,35 @@ class handler(BaseHTTPRequestHandler):
                 except Exception:
                     web_context = ""
 
-            # 2. Cek API Key Gemini
+            # 2. Validasi API Key Gemini
             gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
             if not gemini_key:
                 raise Exception("GEMINI_API_KEY belum terpasang di Environment Variables Vercel")
+
+            # 3. Cek otomatis model apa saja yang diizinkan untuk key ini
+            list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
+            list_res = requests.get(list_url, timeout=10)
+
+            if list_res.status_code != 200:
+                raise Exception(f"Google menolak API Key ini: {list_res.text}")
+
+            models_data = list_res.json().get("models", [])
+            valid_models = [
+                m["name"] for m in models_data 
+                if "generateContent" in m.get("supportedGenerationMethods", [])
+            ]
+
+            if not valid_models:
+                raise Exception("API Key aktif, tapi tidak ada model Gemini yang punya izin generateContent.")
+
+            # Pilih model terbaik yang tersedia (prioritaskan flash atau pro)
+            chosen_model = valid_models[0]
+            for m in valid_models:
+                if "flash" in m.lower():
+                    chosen_model = m
+                    break
+                elif "pro" in m.lower():
+                    chosen_model = m
 
             prompt = f"""
 Anda adalah Sales Trainer dan Coach Retail OPPO Indonesia.
@@ -72,43 +97,21 @@ INSTRUKSI:
 Gunakan format teks Markdown yang rapi.
 """
 
-            # 3. Model Gemini Resmi Terbaru (Mengatasi 404 pada model usang)
-            models_to_try = [
-                "gemini-2.5-flash",
-                "gemini-2.0-flash",
-                "gemini-2.0-flash-exp",
-                "gemini-1.5-flash-002",
-                "gemini-1.5-pro-002"
-            ]
+            # 4. Generate teks pakai model resmi yang terdeteksi
+            gen_url = f"https://generativelanguage.googleapis.com/v1beta/{chosen_model}:generateContent?key={gemini_key}"
+            headers = {"Content-Type": "application/json"}
+            body = {"contents": [{"parts": [{"text": prompt}]}]}
 
-            headers = {
-                "Content-Type": "application/json",
-                "x-goog-api-key": gemini_key
-            }
-            body = {
-                "contents": [{"parts": [{"text": prompt}]}]
-            }
+            gen_res = requests.post(gen_url, headers=headers, json=body, timeout=25)
 
-            output_text = ""
-            last_err = ""
+            if gen_res.status_code != 200:
+                raise Exception(f"Gagal generate pada {chosen_model}: {gen_res.text}")
 
-            for m in models_to_try:
-                # Coba dengan parameter query ?key=
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={gemini_key}"
-                res = requests.post(url, headers=headers, json=body, timeout=25)
+            candidates = gen_res.json().get("candidates", [])
+            if not candidates:
+                raise Exception("AI tidak menghasilkan teks respon.")
 
-                if res.status_code == 200:
-                    candidates = res.json().get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            output_text = parts[0].get("text", "")
-                            break
-                else:
-                    last_err = res.text
-
-            if not output_text:
-                raise Exception(f"Gagal generate dari Gemini: {last_err}")
+            output_text = candidates[0]["content"]["parts"][0]["text"]
 
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
